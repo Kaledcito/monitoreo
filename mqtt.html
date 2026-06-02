@@ -2,6 +2,18 @@
 <html>
 <head>
     <meta charset="utf-8">
+    
+    <script>
+        if (typeof window.localStorage === 'undefined' || window.localStorage === null) {
+            window.localStorage = {
+                getItem: function(key) { return null; },
+                setItem: function(key, val) { },
+                removeItem: function(key) { },
+                clear: function() { }
+            };
+        }
+    </script>
+    
     <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js"></script>
 </head>
 <body style="background-color: #121212; color: #00ff00; font-family: monospace; font-size: 16px; padding: 10px;">
@@ -17,18 +29,16 @@
             }
         }
 
-        // COMPUERTA: Obliga al VisorWeb a esperar la descarga de la librería
         window.onload = function() {
-            logMsg("Librería cargada. Iniciando...");
+            logMsg("Librería cargada. Iniciando puente WSS...");
             
             try {
-                // Validación estricta para evitar bloqueos silenciosos
                 if (typeof Paho === "undefined") {
-                    logMsg("ERROR FATAL: Android bloqueó la descarga de Paho MQTT.");
+                    logMsg("ERROR FATAL: Librería Paho no encontrada.");
                     return;
                 }
 
-                var clientId = "App_Senati_" + Math.random().toString(16).substr(2, 6);
+                var clientId = "App_Diag_" + Math.random().toString(16).substr(2, 6);
                 var client = new Paho.MQTT.Client("broker.hivemq.com", 8884, "/mqtt", clientId);
 
                 client.onConnectionLost = function(res) { 
@@ -45,7 +55,9 @@
                     keepAliveInterval: 10,
                     onSuccess: function() {
                         logMsg("EXITO: Conectado a HiveMQ");
+                        // Canal de escucha del hardware
                         client.subscribe("proyecto/ESP-8E50/status");
+                        logMsg("-> Sistema Listo y Escuchando");
                     },
                     onFailure: function(error) { 
                         logMsg("FALLO CONEXIÓN: " + error.errorMessage); 
@@ -54,20 +66,18 @@
 
                 client.connect(options);
                 
-                // Anclamos la función a la ventana para que App Inventor pueda "verla"
                 window.publicarPrueba = function() {
                     if(client.isConnected()) {
                         var msj = new Paho.MQTT.Message("App conectada y transmitiendo");
                         msj.destinationName = "proyecto/app/prueba";
                         client.send(msj);
-                        logMsg("ENVIADO: Mensaje de prueba");
+                        logMsg("ENVIADO: Pulso manual de prueba");
                     } else {
-                        logMsg("ERROR: No conectado al broker");
+                        logMsg("ERROR: No hay túnel hacia el servidor");
                     }
                 };
 
             } catch (errorInterno) {
-                // Si Android colapsa, nos dirá el porqué exacto
                 logMsg("ERROR JS: " + errorInterno.message);
             }
         };
