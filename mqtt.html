@@ -2,24 +2,12 @@
 <html>
 <head>
     <meta charset="utf-8">
-    
-    <script>
-        if (typeof window.localStorage === 'undefined' || window.localStorage === null) {
-            window.localStorage = {
-                getItem: function(key) { return null; },
-                setItem: function(key, val) { },
-                removeItem: function(key) { },
-                clear: function() { }
-            };
-        }
-    </script>
-    
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mqtt/4.3.7/mqtt.min.js"></script>
 </head>
 <body style="background-color: #121212; color: #00ff00; font-family: monospace; font-size: 16px; padding: 10px;">
     
     <b>Monitor de Diagnóstico v1.x</b><br>
-    <div id="consola">-> Esperando recursos de red...</div>
+    <div id="consola">-> Iniciando motor MQTT.js...</div>
 
     <script>
         function logMsg(texto) {
@@ -30,47 +18,44 @@
         }
 
         window.onload = function() {
-            logMsg("Librería cargada. Iniciando puente WSS...");
-            
             try {
-                if (typeof Paho === "undefined") {
-                    logMsg("ERROR FATAL: Librería Paho no encontrada.");
-                    return;
-                }
+                var clientId = "App_Diag_" + Math.random().toString(16).substr(2, 8);
+                logMsg("Conectando a HiveMQ por WSS...");
 
-                var clientId = "App_Diag_" + Math.random().toString(16).substr(2, 6);
-                var client = new Paho.MQTT.Client("broker.hivemq.com", 8884, "/mqtt", clientId);
+                // Conexión directa y encriptada (WebSockets Secure)
+                var client = mqtt.connect('wss://broker.hivemq.com:8884/mqtt', {
+                    clientId: clientId,
+                    keepalive: 10,
+                    reconnectPeriod: 5000 // Intenta reconectar solo si la app pierde el internet
+                });
 
-                client.onConnectionLost = function(res) { 
-                    logMsg("DESCONECTADO: " + res.errorMessage); 
-                };
-                
-                client.onMessageArrived = function(msg) { 
-                    logMsg("RECEPTOR: " + msg.payloadString); 
-                };
+                // Evento: Al conectar con éxito
+                client.on('connect', function () {
+                    logMsg("EXITO: Conectado a HiveMQ");
+                    // Asegúrate de que este canal sea el mismo que usa tu ESP32
+                    client.subscribe("proyecto/ESP-8E50/status");
+                    logMsg("-> Sistema Listo y Escuchando");
+                });
 
-                var options = {
-                    useSSL: true,
-                    timeout: 5,
-                    keepAliveInterval: 10,
-                    onSuccess: function() {
-                        logMsg("EXITO: Conectado a HiveMQ");
-                        // Canal de escucha del hardware
-                        client.subscribe("proyecto/ESP-8E50/status");
-                        logMsg("-> Sistema Listo y Escuchando");
-                    },
-                    onFailure: function(error) { 
-                        logMsg("FALLO CONEXIÓN: " + error.errorMessage); 
-                    }
-                };
+                // Evento: Al recibir un mensaje del ESP32
+                client.on('message', function (topic, message) {
+                    logMsg(message.toString());
+                });
 
-                client.connect(options);
-                
+                // Evento: Si el túnel se cae
+                client.on('offline', function () {
+                    logMsg("DESCONECTADO: Enlace perdido");
+                });
+
+                // Evento: Si hay un fallo de red
+                client.on('error', function (error) {
+                    logMsg("ERROR MQTT: " + error.message);
+                });
+
+                // Función que ejecuta tu Botón 2 en App Inventor
                 window.publicarPrueba = function() {
-                    if(client.isConnected()) {
-                        var msj = new Paho.MQTT.Message("App conectada y transmitiendo");
-                        msj.destinationName = "proyecto/app/prueba";
-                        client.send(msj);
+                    if(client.connected) {
+                        client.publish("proyecto/app/prueba", "App conectada y transmitiendo");
                         logMsg("ENVIADO: Pulso manual de prueba");
                     } else {
                         logMsg("ERROR: No hay túnel hacia el servidor");
