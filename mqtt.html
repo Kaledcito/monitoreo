@@ -4,45 +4,59 @@
     <meta charset="utf-8">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js"></script>
 </head>
-<body>
+<body style="background-color: #121212; color: #00ff00; font-family: monospace; font-size: 18px; padding: 10px;">
+    
+    <b>Monitor de Diagnóstico IoT v1.x</b><br>
+    <div id="consola">-> Iniciando sistema...</div>
+
     <script>
-        var clientId = "App_" + Math.random().toString(16).substr(2, 8);
+        // Función que imprime en la pantalla HTML y también envía a App Inventor
+        function logMsg(texto) {
+            document.getElementById("consola").innerHTML += "<br>-> " + texto;
+            // Si detecta que está dentro de App Inventor, le avisa a los bloques
+            if(typeof window.AppInventor !== "undefined") {
+                window.AppInventor.setWebViewString(texto);
+            }
+        }
+        
+        var clientId = "App_Senati_" + Math.random().toString(16).substr(2, 6);
+        logMsg("ID Generado: " + clientId);
+        logMsg("Conectando a broker.hivemq.com:8884...");
+
         var client = new Paho.MQTT.Client("broker.hivemq.com", 8884, "/mqtt", clientId);
 
-        client.onConnectionLost = function(responseObject) {
-            window.AppInventor.setWebViewString("Error: Desconectado del Broker");
+        client.onConnectionLost = function(res) { 
+            logMsg("ERROR: Conexión perdida. " + res.errorMessage); 
         };
-
-        client.onMessageArrived = function(message) {
-            window.AppInventor.setWebViewString(message.payloadString.trim());
+        
+        client.onMessageArrived = function(msg) { 
+            logMsg("RECEPTOR: " + msg.payloadString); 
         };
 
         var options = {
             useSSL: true,
-            timeout: 3,
-            keepAliveInterval: 5,
+            timeout: 5,
+            keepAliveInterval: 10,
             onSuccess: function() {
-                // Alerta visual de que logramos entrar al servidor
-                window.AppInventor.setWebViewString("Conexion Exitosa al Broker");
-                client.subscribe("proyecto/ESP-8E50/status", { qos: 1 });
+                logMsg("EXITO: Conectado a HiveMQ");
+                client.subscribe("proyecto/ESP-8E50/status");
+                logMsg("Suscrito al canal de estado");
             },
-            onFailure: function(message) {
-                window.AppInventor.setWebViewString("Error critico de red local");
+            onFailure: function(error) { 
+                logMsg("FALLO CRÍTICO: " + error.errorMessage); 
             }
         };
 
         client.connect(options);
 
-        // NUEVA FUNCIÓN: La app dispara esto cuando presionas el botón
         function publicarPrueba() {
             if(client.isConnected()) {
-                var mensaje = new Paho.MQTT.Message("App conectada y transmitiendo");
-                // Enviamos a un canal de prueba
-                mensaje.destinationName = "proyecto/app/prueba";
-                client.send(mensaje);
-                window.AppInventor.setWebViewString("Mensaje publicado con exito");
+                var msj = new Paho.MQTT.Message("App conectada y transmitiendo");
+                msj.destinationName = "proyecto/app/prueba";
+                client.send(msj);
+                logMsg("ENVIADO: Mensaje de prueba a la nube");
             } else {
-                window.AppInventor.setWebViewString("Fallo: La app no tiene conexion al servidor");
+                logMsg("ERROR: No se puede enviar, no hay conexión");
             }
         }
     </script>
