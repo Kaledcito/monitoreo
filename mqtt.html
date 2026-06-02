@@ -2,70 +2,52 @@
 <html>
 <head>
     <meta charset="utf-8">
+    <link rel="preconnect" href="https://cdnjs.cloudflare.com">
+    <link rel="preconnect" href="https://broker.hivemq.com">
+    
     <script src="https://cdnjs.cloudflare.com/ajax/libs/mqtt/4.3.7/mqtt.min.js"></script>
 </head>
-<body style="background-color: #121212; color: #00ff00; font-family: monospace; font-size: 16px; padding: 10px;">
-    
-    <b>Monitor de Diagnóstico v1.x</b><br>
-    <div id="consola">-> Iniciando motor MQTT.js...</div>
-
+<body>
     <script>
-        function logMsg(texto) {
-            document.getElementById("consola").innerHTML += "<br>-> " + texto;
+        // OPTIMIZACIÓN 2: Transmisión directa a la memoria nativa, sin tocar la interfaz gráfica
+        function enviarApp(texto) {
             if(typeof window.AppInventor !== "undefined") {
                 window.AppInventor.setWebViewString(texto);
             }
         }
 
-        window.onload = function() {
+        // OPTIMIZACIÓN 3: Ejecución inmediata sin esperar al window.onload
+        function arrancarMotor() {
             try {
-                var clientId = "App_Diag_" + Math.random().toString(16).substr(2, 8);
-                logMsg("Conectando a HiveMQ por WSS...");
-
-                // Conexión directa y encriptada (WebSockets Secure)
+                var clientId = "App_Diag_" + Math.random().toString(16).substr(2, 6);
+                
                 var client = mqtt.connect('wss://broker.hivemq.com:8884/mqtt', {
                     clientId: clientId,
-                    keepalive: 10,
-                    reconnectPeriod: 5000 // Intenta reconectar solo si la app pierde el internet
+                    keepalive: 5,         // Reducido a 5s para detectar caídas de red más rápido
+                    connectTimeout: 3000, // Si falla, aborta rápido sin quedarse congelado
+                    clean: true
                 });
 
-                // Evento: Al conectar con éxito
                 client.on('connect', function () {
-                    logMsg("EXITO: Conectado a HiveMQ");
-                    // Asegúrate de que este canal sea el mismo que usa tu ESP32
-                    client.subscribe("proyecto/ESP-8E50/status");
-                    logMsg("-> Sistema Listo y Escuchando");
+                    // OPTIMIZACIÓN 4: QoS 0. Prioriza la velocidad de entrega en tiempo real sobre la confirmación
+                    client.subscribe("proyecto/ESP-8E50/status", { qos: 0 });
                 });
 
-                // Evento: Al recibir un mensaje del ESP32
                 client.on('message', function (topic, message) {
-                    logMsg(message.toString());
+                    enviarApp(message.toString());
                 });
 
-                // Evento: Si el túnel se cae
                 client.on('offline', function () {
-                    logMsg("DESCONECTADO: Enlace perdido");
+                    enviarApp("Offline");
                 });
 
-                // Evento: Si hay un fallo de red
-                client.on('error', function (error) {
-                    logMsg("ERROR MQTT: " + error.message);
-                });
-
-                // Función que ejecuta tu Botón 2 en App Inventor
-                window.publicarPrueba = function() {
-                    if(client.connected) {
-                        client.publish("proyecto/app/prueba", "App conectada y transmitiendo");
-                        logMsg("ENVIADO: Pulso manual de prueba");
-                    } else {
-                        logMsg("ERROR: No hay túnel hacia el servidor");
-                    }
-                };
-
-            } catch (errorInterno) {
-                logMsg("ERROR JS: " + errorInterno.message);
+            } catch (e) {
+                enviarApp("Error");
             }
-        };
+        }
+
+        // Se dispara en el instante en que el navegador lee esta línea
+        arrancarMotor();
     </script>
 </body>
 </html>
